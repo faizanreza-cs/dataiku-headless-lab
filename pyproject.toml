@@ -1,0 +1,12 @@
+[project]
+name = "dataiku-headless-lab"
+version = "0.1.0"
+description = "A test with a known answer: can a coding agent migrate a legacy pipeline into Dataiku without losing its business rules?"
+requires-python = ">=3.11"
+dependencies = ["pandas>=2.2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

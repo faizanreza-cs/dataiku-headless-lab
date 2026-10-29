@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "pandas>=2.2" "pytest>=8"
+      - name: The legacy pipeline still reproduces the answer key
+        run: |
+          python legacy/pipeline.py /tmp/rebuilt
+          python score/compare.py /tmp/rebuilt | tee /tmp/score.md
+          grep -q "12 of 12 checks passed" /tmp/score.md
+      - run: python -m pytest -q

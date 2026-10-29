@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Headless stores the Dataiku API key in plain text here
+.dataiku/
+.env
+
+# Legacy outputs written during a variant B run
+runs/*/legacy/
