@@ -3,23 +3,28 @@
 Medicaid State Drug Utilization Data (SDUD) is about 5.3 million rows a year. This script streams
 each year's file and keeps:
 
-- every product of the four companies that make branded GLP-1 drugs, so the pipeline still has
-  to pick the GLP-1 drugs out from their insulins and everything else, and
+- every product under the main labeler code of the four companies that make branded GLP-1 drugs,
+  so the pipeline still has to pick the GLP-1 drugs out from their insulins and everything else,
+  and
 - the GLP-1 products of generic makers and repackagers, whose 5-digit labeler codes bring in the
   NDC formats that are easy to get wrong.
 
-It also cuts the FDA NDC directory down to the same companies.
+It also cuts the FDA NDC directory down to the same labeler codes.
 
-Usage: python data/prepare.py
+The files in data/raw/ are the ones the published answer key was built from. The FDA directory
+changes every day, so by default this script writes to data/fresh/ and leaves data/raw/ alone.
+
+Usage: python data/prepare.py [output_dir]
 """
 
 import csv
 import io
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
 
-RAW = Path(__file__).parent / "raw"
+OUT = Path(__file__).parent / "fresh"
 
 SDUD_URLS = {
     2024: "https://download.medicaid.gov/data/sdud2024_updatedJuly2026.csv",
@@ -28,7 +33,8 @@ SDUD_URLS = {
 FDA_NDC_ZIP = "https://www.accessdata.fda.gov/cder/ndctext.zip"
 GLP1_CLASS = "GLP-1 Receptor Agonist [EPC]"
 
-# Every product is kept for these (labeler code, 5-digit form)
+# Every product is kept for these main labeler codes (5-digit form). The companies' other codes,
+# such as Sanofi's 00088 (Lantus), have no GLP-1 products.
 BRAND_LABELERS = {"00002", "00024", "00169", "00310"}  # Lilly, Sanofi, Novo Nordisk, AstraZeneca
 
 # Only GLP-1 products are kept for these generic makers and repackagers
@@ -57,7 +63,7 @@ def read_fda(archive: zipfile.ZipFile, name: str) -> tuple[list[str], list[list[
 
 
 def write_fda(name: str, header: list[str], rows: list[list[str]]) -> None:
-    out = RAW / f"fda_{name}"
+    out = OUT / f"fda_{name}"
     with out.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow(header)
@@ -97,7 +103,7 @@ def keep(row: list[str], labeler_col: int, ndc_col: int, glp1_ndcs: set[str]) ->
 
 
 def prepare_sdud(glp1_ndcs: set[str]) -> None:
-    out = RAW / "sdud_2024_2025.csv"
+    out = OUT / "sdud_2024_2025.csv"
     kept = 0
     with out.open("w", newline="") as f:
         writer = None
@@ -118,5 +124,7 @@ def prepare_sdud(glp1_ndcs: set[str]) -> None:
 
 
 if __name__ == "__main__":
-    RAW.mkdir(parents=True, exist_ok=True)
+    if len(sys.argv) > 1:
+        OUT = Path(sys.argv[1])
+    OUT.mkdir(parents=True, exist_ok=True)
     prepare_sdud(prepare_fda())

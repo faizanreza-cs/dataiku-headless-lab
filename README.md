@@ -40,7 +40,7 @@ and writes three tables to [`reference/`](reference), the answer key:
 | 5 | Define GLP-1 by the FDA class "GLP-1 Receptor Agonist [EPC]" | A filter on generic names ending in -glutide misses **22.1%** of prescriptions: Mounjaro, Zepbound, Byetta, generic exenatide and Soliqua |
 | 6 | Spend is the total amount reimbursed, not just the Medicaid share | Spend comes out **1.9%** low |
 | 7 | Growth compares with the previous calendar quarter, and is empty if the brand had no row then | Comparing with the previous row measures **25** rows against an older quarter |
-| 8 | Report NDCs the FDA directory doesn't list | **101** NDCs disappear without a trace, among them the discontinued Bydureon BCise with **79,208** prescriptions |
+| 8 | Report NDCs the FDA directory doesn't list | **101** NDCs disappear without a trace, among them both NDCs of the discontinued Bydureon BCise, with **79,268** prescriptions |
 
 None of these are invented for the test. Each one is in the data, and each number above is what
 breaks if that rule alone is lost.
@@ -57,17 +57,24 @@ breaks if that rule alone is lost.
 | Same state-quarter-brand rows | 2, 4 |
 | One row per state, quarter and brand | 3 |
 | Same brands | 4, 5 |
-| Prescriptions, units, spend, class share and growth match, row by row | 1-7 |
+| Generic names match | - |
+| Prescriptions, units, spend, class share and growth match, row by row (five checks) | 1-7 |
 | National table matches | 1 |
 | Unmatched NDCs reported | 8 |
 
-Column order, column-name case and row order don't matter; numbers must agree to six significant
-digits, and an empty growth value must stay empty.
+That's 13 checks, always the same 13: a missing table or column fails the checks that need it
+rather than dropping them, so scores from different runs can be compared. Column order,
+column-name case and row order don't matter. Numbers must be within 0.001% of the reference value
+(so values rounded to six significant digits still pass), and an empty growth value must stay
+empty. A key that appears twice in the output counts as wrong.
 
-The scorer has its own tests: it passes the reference against itself, catches each kind of broken
-output, and catches a full pipeline run with the wrong NDC padding.
+The scorer has its own tests. It passes the reference against itself; each check fails when the
+column or table it guards is broken, and only that check; and a full run of the pipeline with any
+one of rules 1, 2, 4, 5, 6, 7 or 8 switched off fails that rule's checks. Rule 3 is covered by an
+output with each row split in two.
 
 ```bash
+pip install -e ".[dev]"
 python -m pytest -q
 ```
 
@@ -86,13 +93,16 @@ You need:
   claude plugin install dataiku-headless@dataiku
   ```
 
-- Python 3.11+ with pandas.
+- Python 3.11+, then `pip install -e ".[dev]"` for pandas and pytest.
 
 Then:
 
-1. Connect Headless: ask the agent to "Set up Dataiku Headless" and give it the instance URL and
-   API key. Headless saves the key in plain text in `.dataiku/stdio-config.json`; `.dataiku/` and
-   `.env` are in `.gitignore` so the key can't be committed by accident.
+1. Connect Headless: ask the agent to "Set up Dataiku Headless" (in Claude Code,
+   `/dataiku-headless:dataiku-headless-setup`). It opens a setup page on your machine; enter the
+   instance URL and API key there, not in the chat. Headless saves them in plain text in
+   `~/.dataiku/stdio-config.json`, outside this repo, so delete that file or revoke the key when
+   you're done. `.dataiku/` and `.env` are in `.gitignore` as a precaution, in case you keep a
+   local copy here.
 2. Start a run folder: `cp -r runs/TEMPLATE runs/<date>-<agent>-<variant>`.
 3. Give the agent one of the two prompts in [`tasks/migrate.md`](tasks/migrate.md), exactly as
    written: **A** gives it the code and the expected columns, **B** also asks it to run the old
@@ -109,15 +119,22 @@ agent, the variant, the checks passed and the number of times I had to step in.
 
 | Source | Where | Licence |
 |---|---|---|
-| State Drug Utilization Data 2024 and 2025 | [data.medicaid.gov](https://data.medicaid.gov/dataset/61729e5a-7aa8-448c-8903-ba3e0cd0ea3c) | US public domain |
+| State Drug Utilization Data [2024](https://data.medicaid.gov/dataset/61729e5a-7aa8-448c-8903-ba3e0cd0ea3c) and [2025](https://data.medicaid.gov/dataset/158a1baa-5506-400a-8ec3-97756f0b0536) | data.medicaid.gov | US public domain |
 | NDC Directory | [FDA](https://www.fda.gov/drugs/drug-approvals-and-databases/national-drug-code-directory) | US public domain |
 
 The files in `data/raw/` were cut down by [`data/prepare.py`](data/prepare.py) on 29 October 2026,
-from the July 2026 Medicaid release: every product of Eli Lilly, Novo Nordisk, Sanofi and
-AstraZeneca (118,085 rows in total, insulins and all, so the pipeline still has to find the GLP-1
-drugs), plus the GLP-1 products of generic makers and repackagers. `python data/prepare.py`
-downloads them again; CMS updates the files every quarter and changes the file names, so the URLs
-are at the top of the script.
+from the July 2026 Medicaid release. They hold every product under the main labeler code of Eli
+Lilly (00002), Novo Nordisk (00169), Sanofi (00024) and AstraZeneca (00310): 115,927 rows,
+insulins and other drugs included, so the pipeline still has to find the GLP-1 drugs. The
+companies' other labeler codes, such as Sanofi's 00088 for Lantus, have no GLP-1 products and are
+left out. On top of that come 2,158 rows of GLP-1 products from generic makers and repackagers,
+for 118,085 rows in all.
+
+These committed files are the inputs the answer key was built from. The FDA directory changes
+every day and CMS renames its files every quarter, so a new download gives slightly different
+inputs. `python data/prepare.py` writes one to `data/fresh/` and leaves `data/raw/` alone; if you
+replace `data/raw/` with it, run `python legacy/pipeline.py` again and expect the numbers in this
+README to move.
 
 The FDA directory lists products currently on the market. That's why discontinued products such as
 Bydureon BCise can't be classed and end up in `unmatched_ndcs`, which is rule 8 doing its job.
@@ -125,8 +142,8 @@ Bydureon BCise can't be classed and end up in `unmatched_ndcs`, which is rule 8 
 ## Layout
 
 ```
-data/prepare.py         downloads and cuts the public inputs
-data/raw/               the inputs the pipeline and the agent both use
+data/prepare.py         downloads and cuts the public inputs (into data/fresh/)
+data/raw/               the inputs the answer key was built from, used by the pipeline and the agent
 legacy/pipeline.py      the pipeline to migrate
 reference/              its outputs: the answer key
 tasks/migrate.md        the prompts given to the agent

@@ -1,7 +1,7 @@
 .PHONY: data reference test score
 
-data:  ## download and cut the public inputs again
-	python data/prepare.py
+data:  ## download today's inputs into data/fresh/ (data/raw/ is what the answer key was built from)
+	python data/prepare.py data/fresh
 
 reference:  ## rebuild the answer key from the legacy pipeline
 	python legacy/pipeline.py
