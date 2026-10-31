@@ -55,3 +55,40 @@ called GLP1_MEDICAID.
 
 Headless can export datasets, but if the agent can't write the files, download each dataset from
 Dataiku as CSV (dataset > Export > CSV) into `runs/RUN_NAME/output/` and note it in the log.
+
+## Without Cobuild: the Free Edition and the Python API
+
+Cobuild needs an LLM connection, through Dataiku's AI Services or your own model provider. Without
+one (for example on the self-hosted Free Edition, which is how the first runs here were done), the
+agent can build the Flow itself through Dataiku's Python API, `dataikuapi`. That tests the same
+migration, with the agent writing the recipes instead of Cobuild.
+
+The prompts change in four ways:
+
+- The agent gets the instance URL, an API key file and a Python interpreter with `dataikuapi`,
+  instead of Headless.
+- Step 2 asks for visual recipes (Prepare, Join, Group, Window, Filter, Distinct, Stack and so on)
+  for every step a visual recipe can do, and a code recipe only where none can, with the reason.
+  Otherwise one Python recipe holding the legacy code would pass every check without migrating
+  anything.
+- Variant A also says not to run `legacy/pipeline.py` or reproduce its outputs outside Dataiku,
+  so it can't compare.
+- Each agent works in its own folder holding only `data/raw/`, `legacy/pipeline.py` and the key
+  file, so it can't read this repo's README, `reference/` or the scorer.
+
+The exact prompts are in each run's `prompt.md`.
+
+To install the Free Edition on Linux (Dataiku asks for 32 GB of RAM; the runs here used a machine
+with 15 GB, which the small data allows):
+
+```bash
+wget https://cdn.downloads.dataiku.com/public/dss/15.2.1/dataiku-dss-15.2.1.tar.gz
+tar xzf dataiku-dss-15.2.1.tar.gz
+dataiku-dss-15.2.1/installer.sh -d ~/dss_data -p 11000   # prints the command for missing packages
+~/dss_data/bin/dss start
+```
+
+Open http://localhost:11000, register for the Free Edition, then create an API key with
+`~/dss_data/bin/dsscli api-key-create --admin true`. If `JAVA_TOOL_OPTIONS` is set on the machine,
+unset it for the installer: Java prints it with its version number and the installer can't parse
+the version.
