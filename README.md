@@ -13,6 +13,9 @@ Migrations rarely fail on the big steps. They fail on the small rules someone ad
 never wrote down. So the legacy pipeline here has eight of them, each one measured on real data,
 and a scorer checks the migrated output against the original, rule by rule.
 
+**First results, 31 October 2026:** two agent runs, 13 of 13 checks each, and a Dataiku Window
+recipe that quietly returns running totals. See [Results](#results).
+
 ## The legacy pipeline
 
 [`legacy/pipeline.py`](legacy/pipeline.py) reads two public datasets:
@@ -110,10 +113,49 @@ Then:
 4. Write down every time you step in, in the run's `interventions.csv`.
 5. Score it: `python score/compare.py runs/<run>/output --out runs/<run>/RESULTS.md`.
 
+No Cobuild? The runs so far used the self-hosted Free Edition, with the agent building through
+Dataiku's Python API instead. [`tasks/migrate.md`](tasks/migrate.md) has the install steps and how
+the prompts change.
+
 ## Results
 
-No runs yet. Each run goes in [`runs/`](runs) with its `RESULTS.md`, and gets a line here with the
-agent, the variant, the checks passed and the number of times I had to step in.
+Two runs so far, on 31 October 2026, both without Headless or Cobuild. The Dataiku Free Edition
+used here has no LLM connection for Cobuild, so the agent (Claude, as a Claude Code subagent)
+built the Flow itself through Dataiku's Python API. Nobody stepped in during either run.
+
+| Run | Variant | Flow | Checks passed | Interventions | Time |
+|---|---|---|---|---|---|
+| [blind](runs/2026-10-31-claude-api-blind) | A: not allowed to run the old pipeline | 18 visual recipes, no code | **13 of 13** | 0 | 17 min |
+| [parallel run](runs/2026-10-31-claude-api-parallel) | B: compared its tables with the old pipeline's | 19 visual recipes, no code | **13 of 13** | 0 | 20 min |
+
+Both agents kept all eight rules. Afterwards I went through every command each one ran: neither
+opened this repo, the reference outputs or the scorer.
+
+What they ran into says more than the score:
+
+- **Dataiku's Window recipe returned running totals.** Summing within a group, with no ordering,
+  gave 1, 3, 6 instead of 6, 6, 6 on DSS 15.2.1, for recipes created through the API. An unbounded
+  window frame doesn't change it; only the undocumented `legacyUnboundedWindowStreamBehavior`
+  setting does. Both agents caught it by checking the totals against plain sums. The blind agent set
+  the flag; the other replaced the Window with a Group and a Join, so nothing depends on a hidden
+  setting. [`findings/window_running_sum.py`](findings/window_running_sum.py) reproduces it on five
+  rows.
+- **A Filter recipe silently ignored its condition** in both runs, letting every row through, until
+  the condition was put where the API expects it.
+- **The parallel run found what the scorer forgives:** counts written as `324` rather than `324.0`,
+  and 400 sums that differ from pandas in the 15th significant digit, because the two add numbers in
+  a different order.
+
+What these runs don't show yet:
+
+- **Cobuild.** These agents wrote the recipes themselves. A Headless run needs a Dataiku instance
+  with an LLM connection.
+- **Rules nobody wrote down.** The legacy script names each rule in a comment, and a careful reader
+  keeps them. An Alteryx workflow, or the same script without comments, is a harder test.
+- **Other agents.** Both runs used Claude.
+
+Each run's folder has the exact prompt, notes, the exported tables, `RESULTS.md` and the Dataiku
+project export (Flow only, no data), which imports into any Dataiku instance.
 
 ## Data
 
@@ -149,6 +191,7 @@ reference/              its outputs: the answer key
 tasks/migrate.md        the prompts given to the agent
 runs/                   one folder per run: notes, interventions, outputs, results
 score/compare.py        scores a run against the reference
+findings/               scripts that reproduce what the runs found in Dataiku
 tests/                  tests for the scorer
 ```
 
